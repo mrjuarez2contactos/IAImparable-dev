@@ -16,9 +16,9 @@ Necesitas tener [Node.js](https://nodejs.org/) instalado en tu computadora. Por 
     *   Dentro de la carpeta principal (`mi-transcriptor`), crea un nuevo archivo de texto y nómbralo exactamente `.env` (punto env).
     *   Abre este archivo y añade la siguiente línea, reemplazando `TU_CLAVE_DE_API_DE_GEMINI` con tu clave real:
         ```
-        VITE_API_KEY=TU_CLAVE_DE_API_DE_GEMINI
+        VITE_GEMINI_API_KEY=TU_CLAVE_DE_API_DE_GEMINI
         ```
-    *   **Importante:** El nombre debe ser `VITE_API_KEY`. El prefijo `VITE_` es crucial para que la aplicación funcione en tu computadora. Este fue el error que causó los problemas anteriores y ya ha sido corregido en el código.
+    *   **Importante:** El nombre debe ser `VITE_GEMINI_API_KEY`. El prefijo `VITE_` es crucial para que la aplicación funcione en tu computadora. Este fue el error que causó los problemas anteriores y ya ha sido corregido en el código.
 
 4.  **Abre una terminal:**
     *   **En Windows:** Ve a la carpeta, haz clic derecho y selecciona "Abrir en Terminal" o "Abrir PowerShell aquí".
