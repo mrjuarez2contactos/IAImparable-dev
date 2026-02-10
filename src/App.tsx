@@ -126,20 +126,20 @@ const App: React.FC = () => {
         setRewrittenContent('');
 
         try {
-            const ai = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
             const model = ai.getGenerativeModel({
                 model: 'gemini-2.0-flash',
-                generationConfig: { responseMimeType: "application/json" }
+                generationConfig: { responseMimeType: "application/json" },
+                systemInstruction: "Responde ÚNICAMENTE con un objeto JSON que contenga: video_id, transcripcion_premium (con timestamps) y cortes_perfectos (inicio y fin de Hook, Valor y CTA). No incluyas descripciones visuales ni texto fuera del JSON."
             }, { apiVersion: 'v1' });
 
             let parts: Part[] = [];
             const promptHeader = `
                 INSTRUCCIÓN CRÍTICA: Analiza el video/audio EN SU TOTALIDAD (desde el segundo 0 hasta el final). 
-                No te limites a los primeros segundos. Debes procesar la duración completa.
+                Procesa la duración completa de principio a fin.
 
-                Genera un JSON estrictamente con la siguiente estructura:
+                ESTRUCTURA OBLIGATORIA (JSON):
                 {
-                  "video_id": "ID_DEL_VIDEO_O_NOMBRE_ARCHIVO",
+                  "video_id": "string",
                   "transcripcion_premium": [
                     { "start": number, "end": number, "text": string }
                   ],
@@ -155,7 +155,7 @@ const App: React.FC = () => {
                 2. La transcripción debe ser completa, palabra por palabra, con timestamps precisos de principio a fin.
                 3. Identifica los mejores momentos para 'Hook', 'Valor' y 'CTA' buscando en TODO el video.
                 4. El campo "video_id" debe ser el identificador del video (si es URL) o el nombre del archivo (si es local).
-                5. Devuelve EXCLUSIVAMENTE el JSON. Sin introducciones ni comentarios.
+                5. Devuelve EXCLUSIVAMENTE el JSON. SIN TEXTO EXTRA.
             `;
 
             if (videoUrl) {
