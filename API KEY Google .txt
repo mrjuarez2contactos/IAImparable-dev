@@ -1,0 +1,9 @@
+Detalles de la clave de API
+Clave de API
+AIzaSyDawFb7H3QGuudQzGw5eGfUzqYRSC7nYow
+Nombre
+IAImparable API Key2
+Nombre del proyecto
+projects/89477574555
+Número del proyecto
+89477574555
