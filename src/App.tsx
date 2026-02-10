@@ -47,6 +47,7 @@ const App: React.FC = () => {
     const [rewrittenContent, setRewrittenContent] = useState<string>(''); // Renombrado de businessSummary
     const [status, setStatus] = useState<string>('Por favor, selecciona un archivo (audio/video) o pega un link.');
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [editMapData, setEditMapData] = useState<any>(null); // Nuevo estado para los datos del JSON
 
     // State for summary improvements
     const [improvementInstruction, setImprovementInstruction] = useState('');
@@ -120,71 +121,105 @@ const App: React.FC = () => {
         }
 
         setIsLoading(true);
-        setStatus(`Transcribiendo...`);
+        setStatus(`Transcribiendo y analizando mapa de edición...`);
         setTranscription('');
         setRewrittenContent('');
 
         try {
             const ai = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-            // Usamos gemini-2.0-flash que está disponible en v1 según la prueba local
-            const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' }, { apiVersion: 'v1' });
+            const model = ai.getGenerativeModel({
+                model: 'gemini-2.0-flash',
+                generationConfig: { responseMimeType: "application/json" }
+            }, { apiVersion: 'v1' });
 
             let parts: Part[] = [];
-            let transcriptionSource: string = "";
+            const promptHeader = `
+                INSTRUCCIÓN CRÍTICA: Analiza el video/audio EN SU TOTALIDAD (desde el segundo 0 hasta el final). 
+                No te limites a los primeros segundos. Debes procesar la duración completa.
+
+                Genera un JSON estrictamente con la siguiente estructura:
+                {
+                  "video_id": "ID_DEL_VIDEO_O_NOMBRE_ARCHIVO",
+                  "transcripcion_premium": [
+                    { "start": number, "end": number, "text": string }
+                  ],
+                  "cortes_perfectos": {
+                    "hook": { "start": number, "end": number, "reason": string },
+                    "valor": { "start": number, "end": number, "reason": string },
+                    "cta": { "start": number, "end": number, "reason": string }
+                  }
+                }
+
+                REGLAS DE ORO:
+                1. ANALIZA TODA LA DURACIÓN DEL CLIP.
+                2. La transcripción debe ser completa, palabra por palabra, con timestamps precisos de principio a fin.
+                3. Identifica los mejores momentos para 'Hook', 'Valor' y 'CTA' buscando en TODO el video.
+                4. El campo "video_id" debe ser el identificador del video (si es URL) o el nombre del archivo (si es local).
+                5. Devuelve EXCLUSIVAMENTE el JSON. Sin introducciones ni comentarios.
+            `;
 
             if (videoUrl) {
-                // Lógica CRUCIAL: Se envía la URL como texto para que el modelo la analice y extraiga el audio/información.
-                // NO se debe enviar como Base64.
-                transcriptionSource = videoUrl;
                 parts.push({
-                    text: `Analiza el audio/video en esta URL: ${videoUrl}. 
+                    text: `${promptHeader}
                     
-                    INSTRUCCIONES CRÍTICAS (PARA EVITAR ALUCINACIONES):
-                    1. SOLO si tienes acceso REAL e INEQUÍVOCO al contenido de este vídeo específico, procede con la transcripción.
-                    2. Si no puedes acceder al contenido o no lo conoces con total certeza, responde EXACTAMENTE: "ERROR: NO SE PUEDE ACCEDER AL VÍDEO. POR FAVOR SUBE EL ARCHIVO DE AUDIO PARA UNA TRANSCRIPCIÓN 100% FIABLE."
-                    3. NO intentes adivinar el contenido por el título o la URL. 
-                    4. NO inventes diálogos ni transcripciones genéricas.
+                    Analiza la URL: ${videoUrl}. 
                     
-                    REGLAS DE SALIDA (Si tienes el contenido):
-                    - Ignora los anuncios iniciales.
-                    - Transcribe palabra por palabra el contenido principal.
-                    - Empieza directamente con la primera palabra, sin preámbulos.`
+                    INSTRUCCIONES CRÍTICAS:
+                    1. SOLO si tienes acceso REAL procede.
+                    2. Si no puedes acceder, el JSON debe ser: {"error": "NO_ACCESS"}
+                    3. NO inventes.`
                 });
 
             } else if (file) {
-                // Lógica de subida de archivo Base64
-                transcriptionSource = file.name;
                 const base64Audio = await fileToBase64(file);
-                const audioPart: Part = {
+                parts.push({
                     inlineData: {
                         data: base64Audio,
                         mimeType: file.type,
                     },
-                };
-                parts.push(audioPart);
-                parts.push({ text: "Transcribe este audio recording." });
+                });
+                parts.push({ text: promptHeader });
             }
-
 
             const result = await model.generateContent({
                 contents: [{ role: "user", parts: parts }],
                 safetySettings: safetySettings
             });
 
-            const response = result.response;
+            const responseText = result.response.text();
+            let editMap;
+            try {
+                // Limpiar posible formato markdown si Gemini lo incluye a pesar de la instrucción
+                const cleanedJson = responseText.replace(/```json\n?|\n?```/g, '').trim();
+                editMap = JSON.parse(cleanedJson);
+            } catch (e) {
+                console.error("Error parsing JSON from Gemini:", responseText);
+                throw new Error("La respuesta de la IA no tiene un formato JSON válido.");
+            }
 
-            setTranscription(response.text() ?? "");
-            setStatus(`Transcripción de ${transcriptionSource} completa. Ahora puedes generar contenido alternativo.`);
+            // Asignar video_id si Gemini no lo hizo o si queremos asegurar consistencia
+            if (!editMap.video_id) {
+                editMap.video_id = file ? file.name : (videoUrl || "id_desconocido");
+            }
+
+            setEditMapData(editMap);
+
+            if (editMap.error) {
+                throw new Error("Gemini no pudo acceder al video de la URL.");
+            }
+
+            // Convertir transcripcion_premium a texto plano para la UI actual
+            const plainTextTranscription = editMap.transcripcion_premium
+                .map((t: any) => `[${t.start}-${t.end}] ${t.text}`)
+                .join('\n');
+
+            setTranscription(plainTextTranscription);
+
+            setStatus(`¡Mapa de edición generado exitosamente para todo el video!`);
         } catch (error) {
             console.error('Detailed Transcription Error:', error);
             const errorMessage = error instanceof Error ? error.message : String(error);
-
-            // Si es un 404, intentamos ser más específicos
-            if (errorMessage.includes('404') || errorMessage.includes('not found')) {
-                setStatus(`Error: El modelo no responde (404). Posible error de configuración regional o de API. Detalles: ${errorMessage}`);
-            } else {
-                setStatus(`Error en la transcripción: ${errorMessage}. (Si usas un link, el problema es que la web no puede acceder al audio del video).`);
-            }
+            setStatus(`Error: ${errorMessage}`);
         } finally {
             setIsLoading(false);
         }
@@ -380,6 +415,21 @@ ${rewrittenContent}
         setStatus("Documento generado y descargado.");
     };
 
+    const handleDownloadAutoKilo = () => {
+        if (!editMapData) return;
+
+        const blob = new Blob([JSON.stringify(editMapData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'instrucciones.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setStatus("Archivo 'instrucciones.json' descargado para AutoKilo.");
+    };
+
     const handleExportInstructions = () => {
         if (globalInstructions.length === 0) {
             alert("No hay mejoras permanentes para exportar.");
@@ -526,13 +576,27 @@ ${rewrittenContent}
                     </div>
                 )}
 
-                {(transcription || rewrittenContent) && (
+                {(transcription || rewrittenContent || editMapData) && (
                     <div style={styles.card}>
-                        <h2>4. Exportar</h2>
-                        <p>Genera un archivo .txt con la transcripción y el contenido alternativo.</p>
-                        <button onClick={handleGenerateDocument} style={styles.button}>
-                            Generar Documento
-                        </button>
+                        <h2>4. Exportar y AutoKilo</h2>
+                        <p>Genera los archivos necesarios para tu flujo de trabajo.</p>
+
+                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                            {transcription && (
+                                <button onClick={handleGenerateDocument} style={styles.button}>
+                                    Generar Documento TXT
+                                </button>
+                            )}
+
+                            {editMapData && (
+                                <button
+                                    onClick={handleDownloadAutoKilo}
+                                    style={{ ...styles.button, backgroundColor: '#ff9800' }}
+                                >
+                                    Descargar Instrucciones para AutoKilo
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
