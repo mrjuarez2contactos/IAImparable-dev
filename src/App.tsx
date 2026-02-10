@@ -127,14 +127,18 @@ const App: React.FC = () => {
 
         try {
             const ai = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-            const model = ai.getGenerativeModel({
-                model: 'gemini-2.0-flash',
-                generationConfig: { responseMimeType: "application/json" },
-                systemInstruction: "Responde ÚNICAMENTE con un objeto JSON que contenga: video_id, transcripcion_premium (con timestamps) y cortes_perfectos (inicio y fin de Hook, Valor y CTA). No incluyas descripciones visuales ni texto fuera del JSON."
-            }, { apiVersion: 'v1' });
+            const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+            const systemPrompt = `
+                INSTRUCCIÓN DE SISTEMA: Responde ÚNICAMENTE con un objeto JSON válido.
+                No incluyas introducciones, descripciones visuales, explicaciones ni texto fuera del JSON.
+                El JSON debe contener: video_id, transcripcion_premium (con timestamps) y cortes_perfectos (inicio y fin de Hook, Valor y CTA).
+            `;
 
             let parts: Part[] = [];
             const promptHeader = `
+                ${systemPrompt}
+
                 INSTRUCCIÓN CRÍTICA: Analiza el video/audio EN SU TOTALIDAD (desde el segundo 0 hasta el final). 
                 Procesa la duración completa de principio a fin.
 
@@ -152,10 +156,10 @@ const App: React.FC = () => {
                 }
 
                 REGLAS DE ORO:
-                1. ANALIZA TODA LA DURACIÓN DEL CLIP.
-                2. La transcripción debe ser completa, palabra por palabra, con timestamps precisos de principio a fin.
-                3. Identifica los mejores momentos para 'Hook', 'Valor' y 'CTA' buscando en TODO el video.
-                4. El campo "video_id" debe ser el identificador del video (si es URL) o el nombre del archivo (si es local).
+                1. ANALIZA TODA LA DURACIÓN DEL CLIP DE PRINCIPIO A FIN.
+                2. La transcripción debe ser completa, palabra por palabra, con timestamps precisos.
+                3. Identifica Hook, Valor y CTA buscando en TODO el video.
+                4. El campo "video_id" debe ser el ID del video o el nombre del archivo.
                 5. Devuelve EXCLUSIVAMENTE el JSON. SIN TEXTO EXTRA.
             `;
 
