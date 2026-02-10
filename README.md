@@ -53,3 +53,4 @@ Una vez que ejecutes `npm run dev`, la terminal te mostrará unas direcciones UR
 ---
 
 **Última actualización:** 18 de diciembre de 2025 - API key actualizada para resolver problemas de cuota.
+ 
